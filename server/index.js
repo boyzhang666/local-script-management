@@ -179,7 +179,7 @@ async function guardianAttemptStart(project) {
   };
   const command = start_command;
   const cwd = safeCwd(project.working_directory);
-  const child = spawn(command, { cwd, env, shell: true });
+  const child = spawnWithShell(command, { cwd, env });
   const stdoutBuf = ringBuffer(500);
   const stderrBuf = ringBuffer(500);
   child.stdout.on('data', (data) => stdoutBuf.push(data.toString()));
@@ -261,6 +261,43 @@ async function collectOutput(command, args, options = {}) {
 
 function isWindows() {
   return process.platform === 'win32';
+}
+
+/**
+ * Get shell executable and args for spawning commands
+ * Uses interactive shell to ensure full environment initialization (conda/mamba)
+ */
+function getShellConfig() {
+  if (isWindows()) {
+    return { shell: true };
+  }
+  // Use interactive shell to load .zshrc/.bashrc where conda/mamba is initialized
+  // -i: interactive mode (loads .zshrc/.bashrc)
+  // -c: execute command
+  const userShell = process.env.SHELL || '/bin/bash';
+  return {
+    shell: false,
+    executable: userShell,
+    args: ['-i', '-c']
+  };
+}
+
+/**
+ * Spawn a command using interactive shell to ensure proper environment initialization
+ */
+function spawnWithShell(command, options = {}) {
+  const shellConfig = getShellConfig();
+
+  if (shellConfig.shell) {
+    // Windows: use default shell behavior
+    return spawn(command, { ...options, shell: true });
+  }
+
+  // Unix-like: use interactive shell with -i -c
+  return spawn(shellConfig.executable, [...shellConfig.args, command], {
+    ...options,
+    shell: false
+  });
 }
 
 async function windowsProcessList() {
@@ -363,7 +400,7 @@ app.post('/api/projects/start', (req, res) => {
 
   // Use shell to allow composite commands like `cd dir && VAR=1 npm start`
   const command = start_command;
-  const child = spawn(command, { cwd: safeCwd(working_directory), env, shell: true });
+  const child = spawnWithShell(command, { cwd: safeCwd(working_directory), env });
 
   const stdoutBuf = ringBuffer(500);
   const stderrBuf = ringBuffer(500);
@@ -443,7 +480,7 @@ app.post('/api/projects/stop', (req, res) => {
     }
     const env = { ...process.env, ...((environment_variables && typeof environment_variables === 'object') ? environment_variables : {}) };
     // 使用 safeCwd 与启动逻辑保持一致，避免无效工作目录导致的 spawn 失败
-    const child = spawn(stop_command, { cwd: safeCwd(working_directory), env, shell: true });
+    const child = spawnWithShell(stop_command, { cwd: safeCwd(working_directory), env });
     const stdoutBuf = ringBuffer(200);
     const stderrBuf = ringBuffer(200);
     child.stdout.on('data', (data) => stdoutBuf.push(data.toString()));
@@ -657,7 +694,7 @@ app.post('/api/projects/restart', async (req, res) => {
       });
     }
     if (stop_command) {
-      const child = spawn(stop_command, { cwd, env, shell: true });
+      const child = spawnWithShell(stop_command, { cwd, env });
       const stdoutBuf = ringBuffer(200);
       const stderrBuf = ringBuffer(200);
       child.stdout.on('data', (d) => stdoutBuf.push(d.toString()));
@@ -668,7 +705,7 @@ app.post('/api/projects/restart', async (req, res) => {
 
   await stopExisting();
 
-  const child = spawn(startCmd, { cwd, env, shell: true });
+  const child = spawnWithShell(startCmd, { cwd, env });
   const stdoutBuf = ringBuffer(500);
   const stderrBuf = ringBuffer(500);
   child.stdout.on('data', (data) => stdoutBuf.push(data.toString()));
