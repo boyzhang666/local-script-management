@@ -67,12 +67,16 @@ function isRunning(child) {
   return child && child.exitCode === null && !child.killed;
 }
 
-function ringBuffer(limit = 200) {
+function ringBuffer(limit = 200, id = null, type = null) {
   const arr = [];
   return {
     push(line) {
       arr.push(line);
       if (arr.length > limit) arr.shift();
+      // 同时写入日志文件
+      if (id && type) {
+        appendToLogFile(id, type, line);
+      }
     },
     get() {
       return arr.slice();
@@ -104,6 +108,55 @@ function ensureTaskDir() {
     // ignore mkdir errors; downstream read/write will surface issues
   }
   return dir;
+}
+
+function ensureLogsDir() {
+  const base = baseRunDir();
+  const dir = path.join(base, 'task', 'logs');
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {
+    // ignore mkdir errors
+  }
+  return dir;
+}
+
+function getLogFilePath(id, type) {
+  const logsDir = ensureLogsDir();
+  return path.join(logsDir, `${id}_${type}.log`);
+}
+
+function appendToLogFile(id, type, data) {
+  try {
+    const logPath = getLogFilePath(id, type);
+    fs.appendFileSync(logPath, data);
+  } catch (err) {
+    console.error(`[log] Failed to append to ${type} log for ${id}:`, String(err));
+  }
+}
+
+function readLogFile(id, type) {
+  try {
+    const logPath = getLogFilePath(id, type);
+    if (!fs.existsSync(logPath)) return [];
+    const content = fs.readFileSync(logPath, 'utf8');
+    return content.split('\n').filter(line => line.trim());
+  } catch {
+    return [];
+  }
+}
+
+function clearLogFile(id, type) {
+  try {
+    const logPath = getLogFilePath(id, type);
+    if (fs.existsSync(logPath)) {
+      fs.unlinkSync(logPath);
+    }
+  } catch (err) {
+    console.error(`[log] Failed to clear ${type} log for ${id}:`, String(err));
+  }
 }
 
 function taskFilePath() {
@@ -183,8 +236,8 @@ async function guardianAttemptStart(project) {
   const command = start_command;
   const cwd = safeCwd(project.working_directory);
   const child = spawnWithShell(command, { cwd, env });
-  const stdoutBuf = ringBuffer(500);
-  const stderrBuf = ringBuffer(500);
+  const stdoutBuf = ringBuffer(500, id, 'stdout');
+  const stderrBuf = ringBuffer(500, id, 'stderr');
   child.stdout.on('data', (data) => stdoutBuf.push(data.toString()));
   child.stderr.on('data', (data) => stderrBuf.push(data.toString()));
 
@@ -405,8 +458,8 @@ app.post('/api/projects/start', (req, res) => {
   const command = start_command;
   const child = spawnWithShell(command, { cwd: safeCwd(working_directory), env });
 
-  const stdoutBuf = ringBuffer(500);
-  const stderrBuf = ringBuffer(500);
+  const stdoutBuf = ringBuffer(500, id, 'stdout');
+  const stderrBuf = ringBuffer(500, id, 'stderr');
 
   child.stdout.on('data', (data) => stdoutBuf.push(data.toString()));
   child.stderr.on('data', (data) => stderrBuf.push(data.toString()))
@@ -527,9 +580,19 @@ app.get('/api/projects/status/:id', (req, res) => {
 
 app.get('/api/projects/logs/:id', (req, res) => {
   const { id } = req.params;
-  const entry = processes.get(id);
-  if (!entry) return res.json({ stdout: [], stderr: [] });
-  res.json({ stdout: entry.stdoutBuf.get(), stderr: entry.stderrBuf.get() });
+  // 从文件读取持久化的日志
+  const stdout = readLogFile(id, 'stdout');
+  const stderr = readLogFile(id, 'stderr');
+  res.json({ stdout, stderr });
+});
+
+app.delete('/api/projects/logs/:id', (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  // 清除日志文件
+  clearLogFile(id, 'stdout');
+  clearLogFile(id, 'stderr');
+  res.json({ ok: true, message: 'Logs cleared successfully' });
 });
 
 app.get('/api/projects', (req, res) => {
@@ -709,8 +772,8 @@ app.post('/api/projects/restart', async (req, res) => {
   await stopExisting();
 
   const child = spawnWithShell(startCmd, { cwd, env });
-  const stdoutBuf = ringBuffer(500);
-  const stderrBuf = ringBuffer(500);
+  const stdoutBuf = ringBuffer(500, id, 'stdout');
+  const stderrBuf = ringBuffer(500, id, 'stderr');
   child.stdout.on('data', (data) => stdoutBuf.push(data.toString()));
   child.stderr.on('data', (data) => stderrBuf.push(data.toString()));
 

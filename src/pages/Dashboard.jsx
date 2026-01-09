@@ -17,6 +17,7 @@ import {
 
 import ProjectCard from "../components/projects/ProjectCard";
 import ProjectForm from "../components/projects/ProjectForm";
+import LogsModal from "../components/projects/LogsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +49,8 @@ export default function Dashboard() {
   const [portResults, setPortResults] = useState([]);
   const [procLoading, setProcLoading] = useState(false);
   const [portLoading, setPortLoading] = useState(false);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [viewingLogsProject, setViewingLogsProject] = useState(null);
   // 顶部反馈卡片不再使用，改为右侧 Toast 自动消失
   
   const queryClient = useQueryClient();
@@ -357,6 +360,13 @@ export default function Dashboard() {
     if (!project?.id) return;
     setProjectToDelete(project);
     setDeleteConfirmOpen(true);
+  };
+
+  // 查看日志处理
+  const handleViewLogs = (project) => {
+    if (!project?.id) return;
+    setViewingLogsProject(project);
+    setLogsModalOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -707,6 +717,7 @@ export default function Dashboard() {
                           onRestart={handleRestart}
                           onEdit={handleEdit}
                           onDelete={handleDelete}
+                          onViewLogs={handleViewLogs}
                           viewMode={viewMode}
                         />
                       ))}
@@ -730,6 +741,7 @@ export default function Dashboard() {
                     onRestart={handleRestart}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onViewLogs={handleViewLogs}
                     viewMode={viewMode}
                   />
                 ))}
@@ -880,6 +892,16 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 日志查看模态框 */}
+      <LogsModal
+        project={viewingLogsProject}
+        isOpen={logsModalOpen}
+        onClose={() => {
+          setLogsModalOpen(false);
+          setViewingLogsProject(null);
+        }}
+      />
     </div>
   );
 }

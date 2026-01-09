@@ -57,6 +57,12 @@ export async function getProjectLogs(id) {
   return jsonFetch(`${BASE_URL}/projects/logs/${id}`);
 }
 
+export async function clearProjectLogs(id) {
+  return jsonFetch(`${BASE_URL}/projects/logs/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function searchProcessesByName(name) {
   const q = encodeURIComponent(String(name || ''));
   return jsonFetch(`${BASE_URL}/processes/search?name=${q}`);

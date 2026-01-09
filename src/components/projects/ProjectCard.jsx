@@ -15,6 +15,7 @@ import {
   Trash,
   Timer,
   Layers,
+  FileText,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -56,6 +57,7 @@ export default function ProjectCard({
   onRestart,
   onEdit,
   onDelete,
+  onViewLogs,
   viewMode = "grid",
 }) {
   const category = categoryConfig[project.category] || categoryConfig.other;
@@ -152,6 +154,14 @@ export default function ProjectCard({
         title="编辑"
       >
         <Settings className="w-3 h-3" />
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => onViewLogs(project)}
+        title="查看日志"
+      >
+        <FileText className="w-3 h-3" />
       </Button>
       <Button
         size="sm"
