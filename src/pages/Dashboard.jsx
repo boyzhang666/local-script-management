@@ -236,13 +236,6 @@ export default function Dashboard() {
     if (editingProject) {
       updateMutation.mutate({ id: editingProject.id, data });
     } else {
-      // 新建任务时端口号必填且需合法
-      const port = data?.port;
-      const valid = Number.isInteger(port) && port >= 1 && port <= 65535;
-      if (!valid) {
-        showError('端口号必填', '请填写 1-65535 的有效端口号', 2500);
-        return;
-      }
       createMutation.mutate(data);
     }
   };
